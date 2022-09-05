@@ -113,6 +113,20 @@ type sendBundleParam struct {
 // returned SentBundle can be passed to GetBundleStats to check the bundle
 // status inside the relay.
 func (c *Client) SendBundle(ctx context.Context, req SendBundleParam) (*SentBundle, error) {
+	bundles, err := c.SendBundleSpan(ctx, 1, req)
+	if err != nil {
+		return nil, err
+	}
+	return bundles[0], nil
+}
+
+// SendBundleSpan sends signed transaction bundle to the Flashbots relay across
+// multiple block spans starting from block req.BlockNumber to block
+// req.BlockNumber + span-1 (inclusive).
+func (c *Client) SendBundleSpan(ctx context.Context, span int, req SendBundleParam) ([]*SentBundle, error) {
+	if span < 1 {
+		return nil, errors.New("span number must be greater than zero")
+	}
 	if len(req.Txs) == 0 {
 		return nil, errors.New("cannot send bundle with empty txs")
 	}
@@ -127,21 +141,31 @@ func (c *Client) SendBundle(ctx context.Context, req SendBundleParam) (*SentBund
 	if err != nil {
 		return nil, err
 	}
-	jsonReq := sendBundleParam{
-		Txs:               hexTxs,
-		BlockNumber:       hexutil.Uint64(req.BlockNumber),
-		MinTimestamp:      unixTime(req.MinTimestamp),
-		MaxTimestamp:      unixTime(req.MaxTimestamp),
-		RevertingTxHashes: make([]common.Hash, 0, len(req.AllowRevertTxs)),
-	}
-	for _, tx := range req.AllowRevertTxs {
-		jsonReq.RevertingTxHashes = append(jsonReq.RevertingTxHashes, tx.Hash())
+	minTs, maxTs := unixTime(req.MinTimestamp), unixTime(req.MaxTimestamp)
+	allowRevertTxs := make([]common.Hash, len(req.AllowRevertTxs))
+	for i := range req.AllowRevertTxs {
+		allowRevertTxs[i] = req.AllowRevertTxs[i].Hash()
 	}
 
-	jsonRes := &SentBundle{
-		BlockNumber: req.BlockNumber,
+	jsonReq := make([]sendBundleParam, span)
+	for i := 0; i < span; i++ {
+		jsonReq[i] = sendBundleParam{
+			Txs:               hexTxs,
+			BlockNumber:       hexutil.Uint64(req.BlockNumber) + hexutil.Uint64(i),
+			MinTimestamp:      minTs,
+			MaxTimestamp:      maxTs,
+			RevertingTxHashes: allowRevertTxs,
+		}
 	}
-	return jsonRes, c.Call(ctx, jsonRes, "eth_sendBundle", &jsonReq)
+
+	var jsonRes []*SentBundle
+	if err := c.Call(ctx, &jsonRes, "eth_sendBundle", &jsonReq); err != nil {
+		return nil, err
+	}
+	for i := range jsonRes {
+		jsonRes[i].BlockNumber = req.BlockNumber + uint64(i)
+	}
+	return jsonRes, nil
 }
 
 type callBundleParam struct {
