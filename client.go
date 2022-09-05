@@ -19,6 +19,8 @@ import (
 	"github.com/ethereum/go-ethereum/rpc"
 )
 
+// Client implements the Flashbots RPC client. Use Dial or DialWithSigner to
+// instantiate a new Client.
 type Client struct {
 	uri      string
 	address  common.Address
@@ -50,6 +52,9 @@ func (c *Client) authFrom(payload []byte) (string, error) {
 	return c.address.Hex() + ":" + hexutil.Encode(sig), nil
 }
 
+// Call arbitrary RPC method with params and optional result interface. If
+// result set to nil it will not decode returned values from the server. Any
+// errors generated from the RPC server will be returned as *RPCError.
 func (c *Client) Call(ctx context.Context, result interface{}, method string, params ...interface{}) error {
 	if result != nil && reflect.ValueOf(result).Kind() != reflect.Pointer {
 		return errors.New("result must be a pointer or nil")
@@ -108,6 +113,9 @@ type sendBundleParam struct {
 	RevertingTxHashes []common.Hash   `json:"revertingTxHashes"`
 }
 
+// SendBundle sends signed transaction bundle to the Flashbots relay. The
+// returned SentBundle can be passed to GetBundleStats to check the bundle
+// status inside the relay.
 func (c *Client) SendBundle(ctx context.Context, req SendBundleParam) (*SentBundle, error) {
 	if len(req.Txs) == 0 {
 		return nil, errors.New("cannot send bundle with empty txs")
@@ -147,6 +155,8 @@ type callBundleParam struct {
 	Timestamp        int64           `json:"timestamp"`
 }
 
+// CallBundle simulates the transaction bundle and returns the execution result
+// in CalledBundle.
 func (c *Client) CallBundle(ctx context.Context, req CallBundleParam) (*CalledBundle, error) {
 	if len(req.Txs) == 0 {
 		return nil, errors.New("cannot call bundle with empty txs")
@@ -185,6 +195,9 @@ type sendPrivateTransactionParam struct {
 	Preferences    privateTransactionPreferences `json:"preferences"`
 }
 
+// SendPrivateTransaction sends private transaction to the Flashbots RPC. The
+// returned transaction hash can be used to cancel the transaction using the
+// CancelPrivateTransaction.
 func (c *Client) SendPrivateTransaction(
 	ctx context.Context, tx *types.Transaction, maxBlockNumber uint64, fastMode bool,
 ) (common.Hash, error) {
@@ -205,6 +218,8 @@ type cancelPrivateTransactionParam struct {
 	TxHash common.Hash `json:"txHash"`
 }
 
+// CancelPrivateTransaction cancels the ongoing private transaction inside the
+// Flashbots relay.
 func (c *Client) CancelPrivateTransaction(ctx context.Context, hash common.Hash) (bool, error) {
 	var success bool
 	return success, c.Call(ctx, &success, "eth_cancelPrivateTransaction", cancelPrivateTransactionParam{
@@ -216,6 +231,7 @@ type getUserStatsParam struct {
 	BlockNumber hexutil.Uint `json:"blockNumber"`
 }
 
+// GetUserStats returns the current user status.
 func (c *Client) GetUserStats(ctx context.Context, blockNumber uint64) (*UserStats, error) {
 	var userStats UserStats
 	return &userStats, c.Call(ctx, &userStats, "flashbots_getUserStats", getUserStatsParam{
@@ -228,6 +244,7 @@ type getBundleStatsParam struct {
 	BlockNumber hexutil.Uint `json:"blockNumber"`
 }
 
+// GetBundleStats returns the bundle status.
 func (c *Client) GetBundleStats(ctx context.Context, bundle BundleIdentifier) (*BundleStats, error) {
 	hash, blockNumber := bundle.Identifier()
 
@@ -257,12 +274,15 @@ func dial(uri string, address common.Address, signerFn func(hash []byte) ([]byte
 	}, nil
 }
 
+// Dial creates new Flashbots RPC client using private key to sign the payload.
 func Dial(uri string, privkey *ecdsa.PrivateKey) (*Client, error) {
 	return dial(uri, crypto.PubkeyToAddress(privkey.PublicKey), func(hash []byte) ([]byte, error) {
 		return crypto.Sign(hash, privkey)
 	})
 }
 
+// DialWithSigner creates new Flashbots RPC client using an external hash
+// signer.
 func DialWithSigner(uri string, address common.Address, signer HashSigner) (*Client, error) {
 	return dial(uri, address, func(hash []byte) ([]byte, error) {
 		return signer.SignHash(accounts.Account{Address: address}, hash)

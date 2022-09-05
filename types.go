@@ -11,6 +11,7 @@ import (
 	"github.com/ethereum/go-ethereum/rpc"
 )
 
+// RPCError represents error that is returned from the RPC server.
 type RPCError struct {
 	Code    int    `json:"code"`
 	Message string `json:"message"`
@@ -20,10 +21,13 @@ func (e *RPCError) Error() string {
 	return fmt.Sprintf("rpc error %d: %s", e.Code, e.Message)
 }
 
+// HashSigner abstracts an external hash signer.
 type HashSigner interface {
 	SignHash(acc accounts.Account, hash []byte) ([]byte, error)
 }
 
+// BundleIdentifier abstracts bundle identification that can be used to fetch
+// its status using GetBundleStats.
 type BundleIdentifier interface {
 	Identifier() (hash common.Hash, blockNumber uint64)
 }
