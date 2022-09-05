@@ -69,52 +69,54 @@ func verifySignature(header string, hash []byte) bool {
 	return crypto.VerifySignature(pubkey, hash, sign[:len(sign)-1])
 }
 
+func newRPCError(msg string) *bundlerpc.RPCError {
+	return &bundlerpc.RPCError{Message: msg, Code: -1000}
+}
+
+func (fn jsonrpcFunc) serveRPC(r *http.Request) (interface{}, error) {
+	if r.Method != "POST" {
+		return nil, newRPCError("http method is not post")
+	}
+	if r.Header.Get("Content-Type") != "application/json" {
+		return nil, newRPCError("http content type header is not json")
+	}
+
+	body, err := io.ReadAll(r.Body)
+	if err != nil {
+		return nil, err
+	}
+	if !verifySignature(r.Header.Get("X-Flashbots-Signature"), bundlerpc.StandardHash(body)) {
+		return nil, newRPCError("invalid http signature header")
+	}
+
+	var req jsonrpcRequest
+	if err := json.Unmarshal(body, &req); err != nil {
+		return nil, err
+	}
+
+	return fn(req)
+}
+
 func (fn jsonrpcFunc) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	writeResponse := func(v jsonrpcResponse) {
 		w.Header().Set("Content-Type", "application/json")
 		_ = json.NewEncoder(w).Encode(v)
 	}
-	writeError := func(err error) {
-		berr, ok := err.(*bundlerpc.RPCError)
-		if !ok {
-			berr = &bundlerpc.RPCError{
-				Code:    -1,
-				Message: "server error: " + err.Error(),
-			}
+
+	res, err := fn.serveRPC(r)
+	if err == nil {
+		writeResponse(jsonrpcResponse{Result: res})
+		return
+	}
+
+	berr, ok := err.(*bundlerpc.RPCError)
+	if !ok {
+		berr = &bundlerpc.RPCError{
+			Code:    -100,
+			Message: "server error: " + err.Error(),
 		}
-		writeResponse(jsonrpcResponse{Error: berr})
 	}
-
-	if r.Method != "POST" {
-		writeError(&bundlerpc.RPCError{Code: -1, Message: "http method is not post"})
-		return
-	}
-	if r.Header.Get("Content-Type") != "application/json" {
-		writeError(&bundlerpc.RPCError{Code: -1, Message: "http content type header is not json"})
-		return
-	}
-
-	body, err := io.ReadAll(r.Body)
-	if err != nil {
-		writeError(err)
-		return
-	}
-	if !verifySignature(r.Header.Get("X-Flashbots-Signature"), bundlerpc.StandardHash(body)) {
-		writeError(&bundlerpc.RPCError{Code: -1, Message: "invalid signature http header"})
-		return
-	}
-
-	var req jsonrpcRequest
-	if err := json.Unmarshal(body, &req); err != nil {
-		writeError(err)
-		return
-	}
-	result, err := fn(req)
-	if err != nil {
-		writeError(err)
-		return
-	}
-	writeResponse(jsonrpcResponse{Result: result})
+	writeResponse(jsonrpcResponse{Error: berr})
 }
 
 func TestClientCall(t *testing.T) {
