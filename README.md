@@ -1,5 +1,8 @@
 # Flashbots Bundle RPC
 
+[![Go Reference](https://pkg.go.dev/badge/github.com/adzil/bundlerpc.svg)](https://pkg.go.dev/github.com/adzil/bundlerpc)
+[![Go Report Card](https://goreportcard.com/badge/github.com/adzil/bundlerpc)](https://goreportcard.com/report/github.com/adzil/bundlerpc)
+
 BundleRPC implements Flashbots JSON-RPC client that is compatible with the standard Go-Ethereum data types.
 
 ## Quick Start by Example
