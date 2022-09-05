@@ -1,6 +1,7 @@
 package bundlerpc_test
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
 	"errors"
@@ -11,6 +12,7 @@ import (
 	"testing"
 
 	"github.com/adzil/bundlerpc"
+	"github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/common/hexutil"
 	"github.com/ethereum/go-ethereum/crypto"
 	"github.com/stretchr/testify/assert"
@@ -48,12 +50,20 @@ func verifySignature(header string, hash []byte) bool {
 	if pos <= 0 {
 		return false
 	}
+	addr, err := hexutil.Decode(header[:pos])
+	if err != nil {
+		return false
+	}
 	sign, err := hexutil.Decode(header[pos+1:])
 	if err != nil {
 		return false
 	}
 	pubkey, err := crypto.Ecrecover(hash, sign)
 	if err != nil {
+		return false
+	}
+	extractedAddr := common.BytesToAddress(crypto.Keccak256(pubkey[1:])[12:])
+	if !bytes.Equal(addr, extractedAddr[:]) {
 		return false
 	}
 	return crypto.VerifySignature(pubkey, hash, sign[:len(sign)-1])
