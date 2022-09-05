@@ -122,7 +122,7 @@ func (fn jsonrpcFunc) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 func TestClientCall(t *testing.T) {
 	server := httptest.NewServer(jsonrpcFunc(func(req jsonrpcRequest) (interface{}, error) {
 		if req.Method != "rpc_echo" {
-			return nil, &bundlerpc.RPCError{Code: -1, Message: "invalid method or params"}
+			return nil, newRPCError("invalid method or params")
 		}
 		var msg string
 		if err := req.DecodeParams(&msg); err != nil {
