@@ -142,7 +142,7 @@ func (c *Client) SendBundle(ctx context.Context, req SendBundleParam) (*SentBund
 
 type callBundleParam struct {
 	Txs              []hexutil.Bytes `json:"txs"`
-	BlockNumber      uint64          `json:"blockNumber"`
+	BlockNumber      hexutil.Uint    `json:"blockNumber"`
 	StateBlockNumber rpc.BlockNumber `json:"stateBlockNumber"`
 	Timestamp        int64           `json:"timestamp"`
 }
@@ -164,7 +164,7 @@ func (c *Client) CallBundle(ctx context.Context, req CallBundleParam) (*CalledBu
 	}
 	jsonReq := callBundleParam{
 		Txs:              hexTx,
-		BlockNumber:      req.BlockNumber,
+		BlockNumber:      hexutil.Uint(req.BlockNumber),
 		StateBlockNumber: req.StateBlockNumber,
 		Timestamp:        unixTime(req.Timestamp),
 	}
