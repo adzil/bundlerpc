@@ -5,6 +5,8 @@
 
 BundleRPC implements Flashbots JSON-RPC client that is compatible with the standard Go-Ethereum data types.
 
+For more information about Flashbots RPC, please visit [their documentation website](https://docs.flashbots.net/flashbots-auction/searchers/advanced/rpc-endpoint/).
+
 ## Quick Start by Example
 
 The following code snippet is incomplete and cannot be run as-is. However, it can be used as the starting point for interacting with the Flashbots RPC.

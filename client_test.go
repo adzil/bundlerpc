@@ -12,7 +12,6 @@ import (
 	"testing"
 
 	"github.com/adzil/bundlerpc"
-	"github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/common/hexutil"
 	"github.com/ethereum/go-ethereum/crypto"
 	"github.com/stretchr/testify/assert"
@@ -58,11 +57,10 @@ func verifySignature(header string, hash []byte) bool {
 	if err != nil {
 		return false
 	}
-	pubkey, err := crypto.Ecrecover(hash, sign)
+	pubkey, extractedAddr, err := bundlerpc.RecoverPubkey(hash, sign)
 	if err != nil {
 		return false
 	}
-	extractedAddr := common.BytesToAddress(crypto.Keccak256(pubkey[1:])[12:])
 	if !bytes.Equal(addr, extractedAddr[:]) {
 		return false
 	}

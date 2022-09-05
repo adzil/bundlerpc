@@ -11,6 +11,10 @@ import (
 	"github.com/ethereum/go-ethereum/rpc"
 )
 
+// SignerFunc is a generic hash signer function placeholder to support custom
+// keystore implementation.
+type SignerFunc func(hash []byte) ([]byte, error)
+
 // RPCError represents error that is returned from the RPC server.
 type RPCError struct {
 	Code    int    `json:"code"`

@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"crypto/ecdsa"
+	"crypto/rand"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -24,7 +25,7 @@ import (
 type Client struct {
 	uri      string
 	address  common.Address
-	signerFn func(hash []byte) ([]byte, error)
+	signerFn SignerFunc
 }
 
 type jsonrpcRequest struct {
@@ -37,11 +38,6 @@ type jsonrpcRequest struct {
 type jsonrpcResponse struct {
 	Result json.RawMessage `json:"result"`
 	Error  *RPCError       `json:"error"`
-}
-
-func standardHash(payload []byte) []byte {
-	hash := crypto.Keccak256Hash(payload).Hex()
-	return accounts.TextHash([]byte(hash))
 }
 
 func (c *Client) authFrom(payload []byte) (string, error) {
@@ -255,7 +251,7 @@ func (c *Client) GetBundleStats(ctx context.Context, bundle BundleIdentifier) (*
 	})
 }
 
-func dial(uri string, address common.Address, signerFn func(hash []byte) ([]byte, error)) (*Client, error) {
+func dial(uri string, address common.Address, signerFn SignerFunc) (*Client, error) {
 	parsedURI, err := url.Parse(uri)
 	if err != nil {
 		return nil, err
@@ -287,4 +283,25 @@ func DialWithSigner(uri string, address common.Address, signer HashSigner) (*Cli
 	return dial(uri, address, func(hash []byte) ([]byte, error) {
 		return signer.SignHash(accounts.Account{Address: address}, hash)
 	})
+}
+
+// DialWithSignerFunc creates new Flashbots RPC client using custom hash signer
+// function.
+func DialWithSignerFunc(uri string, signerFn SignerFunc) (*Client, error) {
+	var seed [64]byte
+	if _, err := rand.Read(seed[:]); err != nil {
+		return nil, err
+	}
+
+	hash := standardHash(seed[:])
+	sign, err := signerFn(hash)
+	if err != nil {
+		return nil, err
+	}
+	_, addr, err := recoverPubkey(hash, sign)
+	if err != nil {
+		return nil, err
+	}
+
+	return dial(uri, addr, signerFn)
 }
