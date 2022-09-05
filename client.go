@@ -7,11 +7,9 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"math/big"
 	"net/http"
 	"net/url"
 	"reflect"
-	"time"
 
 	"github.com/ethereum/go-ethereum/accounts"
 	"github.com/ethereum/go-ethereum/common"
@@ -21,24 +19,6 @@ import (
 	"github.com/ethereum/go-ethereum/rpc"
 )
 
-type RPCError struct {
-	Code    int    `json:"code"`
-	Message string `json:"message"`
-}
-
-func (e *RPCError) Error() string {
-	return fmt.Sprintf("rpc error %d: %s", e.Code, e.Message)
-}
-
-type HashSigner interface {
-	SignHash(acc accounts.Account, hash []byte) ([]byte, error)
-}
-
-type Bundle interface {
-	bundleHash() common.Hash
-	blockNumber() uint64
-}
-
 type Client struct {
 	uri      string
 	pubkey   common.Address
@@ -46,10 +26,10 @@ type Client struct {
 }
 
 type jsonrpcRequest struct {
-	JSONRPC string        `json:"jsonrpc"`
-	ID      int           `json:"id"`
-	Method  string        `json:"method"`
-	Params  []interface{} `json:"params"`
+	RPCVersion string        `json:"jsonrpc"`
+	ID         int           `json:"id"`
+	Method     string        `json:"method"`
+	Params     []interface{} `json:"params"`
 }
 
 type jsonrpcResponse struct {
@@ -57,7 +37,7 @@ type jsonrpcResponse struct {
 	Error  *RPCError       `json:"error"`
 }
 
-func (c *Client) authHeaderFrom(payload []byte) (string, error) {
+func (c *Client) authFrom(payload []byte) (string, error) {
 	hash := crypto.Keccak256Hash(payload).Hex()
 	sig, err := c.signerFn(accounts.TextHash([]byte(hash)))
 	if err != nil {
@@ -72,15 +52,15 @@ func (c *Client) Call(ctx context.Context, result interface{}, method string, pa
 	}
 
 	payload, err := json.Marshal(&jsonrpcRequest{
-		JSONRPC: "2.0",
-		ID:      1,
-		Method:  method,
-		Params:  params,
+		RPCVersion: "2.0",
+		ID:         1,
+		Method:     method,
+		Params:     params,
 	})
 	if err != nil {
 		return err
 	}
-	authHeader, err := c.authHeaderFrom(payload)
+	authHeader, err := c.authFrom(payload)
 	if err != nil {
 		return err
 	}
@@ -113,74 +93,12 @@ func (c *Client) Call(ctx context.Context, result interface{}, method string, pa
 	return json.Unmarshal(resBody.Result, result)
 }
 
-type SendBundleRequest struct {
-	Txs            []*types.Transaction
-	BlockNumber    uint64
-	MinTimestamp   time.Time
-	MaxTimestamp   time.Time
-	AllowRevertTxs []*types.Transaction
-}
-
-func isSubsetTxs(a []*types.Transaction, b []*types.Transaction) bool {
-	if len(b) == 0 {
-		return true
-	}
-	if len(a) == 0 && len(b) > 0 {
-		return false
-	}
-
-	txs := make(map[*types.Transaction]struct{})
-	for _, tx := range a {
-		txs[tx] = struct{}{}
-	}
-
-	for _, tx := range b {
-		if _, ok := txs[tx]; !ok {
-			return false
-		}
-	}
-
-	return true
-}
-
-type sendBundleRequest struct {
+type sendBundleParam struct {
 	Txs               []hexutil.Bytes `json:"txs"`
 	BlockNumber       hexutil.Uint64  `json:"blockNumber"`
 	MinTimestamp      int64           `json:"minTimestamp,omitempty"`
 	MaxTimestamp      int64           `json:"maxTimestamp,omitempty"`
 	RevertingTxHashes []common.Hash   `json:"revertingTxHashes"`
-}
-
-type SentBundle struct {
-	BundleHash  common.Hash `json:"bundleHash"`
-	BlockNumber uint64      `json:"-"`
-}
-
-func (b *SentBundle) bundleHash() common.Hash {
-	return b.BundleHash
-}
-
-func (b *SentBundle) blockNumber() uint64 {
-	return b.BlockNumber
-}
-
-func unixTime(t time.Time) int64 {
-	if !t.IsZero() {
-		return t.Unix()
-	}
-	return 0
-}
-
-func hexTxsFrom(txs []*types.Transaction) ([]hexutil.Bytes, error) {
-	hexTxs := make([]hexutil.Bytes, 0, len(txs))
-	for _, tx := range txs {
-		encTx, err := tx.MarshalBinary()
-		if err != nil {
-			return nil, err
-		}
-		hexTxs = append(hexTxs, encTx)
-	}
-	return hexTxs, nil
 }
 
 func (c *Client) SendBundle(ctx context.Context, req SendBundleRequest) (*SentBundle, error) {
@@ -198,7 +116,7 @@ func (c *Client) SendBundle(ctx context.Context, req SendBundleRequest) (*SentBu
 	if err != nil {
 		return nil, err
 	}
-	jsonReq := sendBundleRequest{
+	jsonReq := sendBundleParam{
 		Txs:               hexTxs,
 		BlockNumber:       hexutil.Uint64(req.BlockNumber),
 		MinTimestamp:      unixTime(req.MinTimestamp),
@@ -215,52 +133,11 @@ func (c *Client) SendBundle(ctx context.Context, req SendBundleRequest) (*SentBu
 	return jsonRes, c.Call(ctx, jsonRes, "eth_sendBundle", &jsonReq)
 }
 
-type CallBundleRequest struct {
-	Txs              []*types.Transaction
-	BlockNumber      uint64
-	StateBlockNumber rpc.BlockNumber
-	Timestamp        time.Time
-}
-
-type callBundleRequest struct {
+type callBundleParam struct {
 	Txs              []hexutil.Bytes `json:"txs"`
 	BlockNumber      uint64          `json:"blockNumber"`
 	StateBlockNumber rpc.BlockNumber `json:"stateBlockNumber"`
 	Timestamp        int64           `json:"timestamp"`
-}
-
-type TxResult struct {
-	CoinbaseDiff      *big.Int       `json:"coinbaseDiff"`
-	ETHSentToCoinbase *big.Int       `json:"ethSentToCoinbase"`
-	GasFees           *big.Int       `json:"gasFees"`
-	GasPrice          *big.Int       `json:"gasPrice"`
-	GasUsed           uint64         `json:"gasUsed"`
-	From              common.Address `json:"fromAddress"`
-	To                common.Address `json:"toAddress"`
-	Hash              common.Hash    `json:"txHash"`
-	Value             *big.Int       `json:"value"`
-	Error             string         `json:"error"`
-	Revert            string         `json:"revert"`
-}
-
-type CalledBundle struct {
-	BundleHash        common.Hash `json:"bundleHash"`
-	BlockNumber       uint64      `json:"-"`
-	CoinbaseDiff      *big.Int    `json:"coinbaseDiff"`
-	ETHSentToCoinbase *big.Int    `json:"ethSentToCoinbase"`
-	GasFees           *big.Int    `json:"gasFees"`
-	TotalGasUsed      uint64      `json:"totalGasUsed"`
-	StateBlockNumber  uint64      `json:"stateBlockNumber"`
-	Results           []TxResult  `json:"results"`
-	FirstRevert       *TxResult   `json:"firstRevert"`
-}
-
-func (b *CalledBundle) bundleHash() common.Hash {
-	return b.BundleHash
-}
-
-func (b *CalledBundle) blockNumber() uint64 {
-	return b.BlockNumber
 }
 
 func (c *Client) CallBundle(ctx context.Context, req CallBundleRequest) (*CalledBundle, error) {
@@ -278,7 +155,7 @@ func (c *Client) CallBundle(ctx context.Context, req CallBundleRequest) (*Called
 	if err != nil {
 		return nil, err
 	}
-	jsonReq := callBundleRequest{
+	jsonReq := callBundleParam{
 		Txs:              hexTx,
 		BlockNumber:      req.BlockNumber,
 		StateBlockNumber: req.StateBlockNumber,
@@ -289,6 +166,69 @@ func (c *Client) CallBundle(ctx context.Context, req CallBundleRequest) (*Called
 		BlockNumber: req.BlockNumber,
 	}
 	return jsonRes, c.Call(ctx, jsonRes, "eth_callBundle", jsonReq)
+}
+
+type privateTransactionPreferences struct {
+	Fast bool `json:"fast"`
+}
+
+type sendPrivateTransactionParam struct {
+	Tx             hexutil.Bytes                 `json:"tx"`
+	MaxBlockNumber hexutil.Uint                  `json:"maxBlockNumber"`
+	Preferences    privateTransactionPreferences `json:"preferences"`
+}
+
+func (c *Client) SendPrivateTransaction(
+	ctx context.Context, tx *types.Transaction, maxBlockNumber uint64, fastMode bool,
+) (common.Hash, error) {
+	encTx, err := tx.MarshalBinary()
+	if err != nil {
+		return common.Hash{}, err
+	}
+
+	var hash common.Hash
+	return hash, c.Call(ctx, &hash, "eth_sendPrivateTransaction", sendPrivateTransactionParam{
+		Tx:             encTx,
+		MaxBlockNumber: hexutil.Uint(maxBlockNumber),
+		Preferences:    privateTransactionPreferences{Fast: fastMode},
+	})
+}
+
+type cancelPrivateTransactionParam struct {
+	TxHash common.Hash `json:"txHash"`
+}
+
+func (c *Client) CancelPrivateTransaction(ctx context.Context, hash common.Hash) (bool, error) {
+	var success bool
+	return success, c.Call(ctx, &success, "eth_cancelPrivateTransaction", cancelPrivateTransactionParam{
+		TxHash: hash,
+	})
+}
+
+type getUserStatsParam struct {
+	BlockNumber hexutil.Uint `json:"blockNumber"`
+}
+
+func (c *Client) GetUserStats(ctx context.Context, blockNumber uint64) (*UserStats, error) {
+	var userStats UserStats
+	return &userStats, c.Call(ctx, &userStats, "flashbots_getUserStats", getUserStatsParam{
+		BlockNumber: hexutil.Uint(blockNumber),
+	})
+}
+
+type getBundleStatsParam struct {
+	BundleHash  common.Hash  `json:"bundleHash"`
+	BlockNumber hexutil.Uint `json:"blockNumber"`
+}
+
+func (c *Client) GetBundleStats(ctx context.Context, bundle BundleIdentifier) (*BundleStats, error) {
+	hash, blockNumber := bundle.Identifier()
+
+	var jsonRes BundleStats
+	return &jsonRes, c.Call(ctx, &jsonRes, "flashbots_getBundleStats", getBundleStatsParam{
+		BundleHash:  hash,
+		BlockNumber: hexutil.Uint(blockNumber),
+	})
 }
 
 func dial(uri string, pubkey common.Address, signerFn func(hash []byte) ([]byte, error)) (*Client, error) {
