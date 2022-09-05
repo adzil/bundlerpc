@@ -100,11 +100,11 @@ type BundleStats struct {
 }
 
 type UserStats struct {
-	IsHighPriority         bool     `json:"is_high_priority"`
-	AllTimeMinerPayments   *big.Int `json:"all_time_miner_payments"`
-	AllTimeGasSimulated    *big.Int `json:"all_time_gas_simulated"`
-	Last7DaysMinerPayments *big.Int `json:"last_7d_miner_payments"`
-	Last7DaysGasSimulated  *big.Int `json:"last_7d_gas_simulated"`
-	Last1DayMinerPayments  *big.Int `json:"last_1d_miner_payments"`
-	Last1DayGasSimulated   *big.Int `json:"last_1d_gas_simulated"`
+	IsHighPriority       bool     `json:"is_high_priority"`
+	AllTimeMinerPayments *big.Int `json:"all_time_miner_payments"`
+	AllTimeGasSimulated  *big.Int `json:"all_time_gas_simulated"`
+	Last7dMinerPayments  *big.Int `json:"last_7d_miner_payments"`
+	Last7dGasSimulated   *big.Int `json:"last_7d_gas_simulated"`
+	Last1dMinerPayments  *big.Int `json:"last_1d_miner_payments"`
+	Last1dGasSimulated   *big.Int `json:"last_1d_gas_simulated"`
 }
