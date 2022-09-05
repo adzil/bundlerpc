@@ -28,7 +28,7 @@ type BundleIdentifier interface {
 	Identifier() (hash common.Hash, blockNumber uint64)
 }
 
-type SendBundleRequest struct {
+type SendBundleParam struct {
 	Txs            []*types.Transaction
 	BlockNumber    uint64
 	MinTimestamp   time.Time
@@ -45,7 +45,7 @@ func (b *SentBundle) Identifier() (hash common.Hash, blockNumber uint64) {
 	return b.BundleHash, b.BlockNumber
 }
 
-type CallBundleRequest struct {
+type CallBundleParam struct {
 	Txs              []*types.Transaction
 	BlockNumber      uint64
 	StateBlockNumber rpc.BlockNumber
@@ -92,7 +92,7 @@ type BundleStats struct {
 }
 
 type UserStats struct {
-	IsHighPriority         bool `json:"is_high_priority"`
+	IsHighPriority         bool     `json:"is_high_priority"`
 	AllTimeMinerPayments   *big.Int `json:"all_time_miner_payments"`
 	AllTimeGasSimulated    *big.Int `json:"all_time_gas_simulated"`
 	Last7DaysMinerPayments *big.Int `json:"last_7d_miner_payments"`

@@ -108,7 +108,7 @@ type sendBundleParam struct {
 	RevertingTxHashes []common.Hash   `json:"revertingTxHashes"`
 }
 
-func (c *Client) SendBundle(ctx context.Context, req SendBundleRequest) (*SentBundle, error) {
+func (c *Client) SendBundle(ctx context.Context, req SendBundleParam) (*SentBundle, error) {
 	if len(req.Txs) == 0 {
 		return nil, errors.New("cannot send bundle with empty txs")
 	}
@@ -147,7 +147,7 @@ type callBundleParam struct {
 	Timestamp        int64           `json:"timestamp"`
 }
 
-func (c *Client) CallBundle(ctx context.Context, req CallBundleRequest) (*CalledBundle, error) {
+func (c *Client) CallBundle(ctx context.Context, req CallBundleParam) (*CalledBundle, error) {
 	if len(req.Txs) == 0 {
 		return nil, errors.New("cannot call bundle with empty txs")
 	}
