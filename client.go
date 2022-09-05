@@ -21,7 +21,7 @@ import (
 
 type Client struct {
 	uri      string
-	pubkey   common.Address
+	address  common.Address
 	signerFn func(hash []byte) ([]byte, error)
 }
 
@@ -37,13 +37,17 @@ type jsonrpcResponse struct {
 	Error  *RPCError       `json:"error"`
 }
 
-func (c *Client) authFrom(payload []byte) (string, error) {
+func standardHash(payload []byte) []byte {
 	hash := crypto.Keccak256Hash(payload).Hex()
-	sig, err := c.signerFn(accounts.TextHash([]byte(hash)))
+	return accounts.TextHash([]byte(hash))
+}
+
+func (c *Client) authFrom(payload []byte) (string, error) {
+	sig, err := c.signerFn(standardHash(payload))
 	if err != nil {
 		return "", err
 	}
-	return c.pubkey.Hex() + ":" + hexutil.Encode(sig), nil
+	return c.address.Hex() + ":" + hexutil.Encode(sig), nil
 }
 
 func (c *Client) Call(ctx context.Context, result interface{}, method string, params ...interface{}) error {
@@ -86,6 +90,9 @@ func (c *Client) Call(ctx context.Context, result interface{}, method string, pa
 	}
 	if resBody.Error != nil {
 		return resBody.Error
+	}
+	if res.StatusCode < 200 || res.StatusCode > 299 {
+		return errors.New("rpc server returns no error but the status code is not 2XX")
 	}
 	if result == nil {
 		return nil
@@ -231,7 +238,7 @@ func (c *Client) GetBundleStats(ctx context.Context, bundle BundleIdentifier) (*
 	})
 }
 
-func dial(uri string, pubkey common.Address, signerFn func(hash []byte) ([]byte, error)) (*Client, error) {
+func dial(uri string, address common.Address, signerFn func(hash []byte) ([]byte, error)) (*Client, error) {
 	parsedURI, err := url.Parse(uri)
 	if err != nil {
 		return nil, err
@@ -245,7 +252,7 @@ func dial(uri string, pubkey common.Address, signerFn func(hash []byte) ([]byte,
 
 	return &Client{
 		uri:      uri,
-		pubkey:   pubkey,
+		address:  address,
 		signerFn: signerFn,
 	}, nil
 }
@@ -256,8 +263,8 @@ func Dial(uri string, privkey *ecdsa.PrivateKey) (*Client, error) {
 	})
 }
 
-func DialWithSigner(uri string, pubkey common.Address, signer HashSigner) (*Client, error) {
-	return dial(uri, pubkey, func(hash []byte) ([]byte, error) {
-		return signer.SignHash(accounts.Account{Address: pubkey}, hash)
+func DialWithSigner(uri string, address common.Address, signer HashSigner) (*Client, error) {
+	return dial(uri, address, func(hash []byte) ([]byte, error) {
+		return signer.SignHash(accounts.Account{Address: address}, hash)
 	})
 }
