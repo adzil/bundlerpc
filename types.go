@@ -44,6 +44,15 @@ type SendBundleParam struct {
 	AllowRevertTxs []*types.Transaction
 }
 
+type SendBundleInRangeParam struct {
+	Txs              []*types.Transaction
+	StartBlockNumber uint64
+	EndBlockNumber   uint64
+	MinTimestamp     time.Time
+	MaxTimestamp     time.Time
+	AllowRevertTxs   []*types.Transaction
+}
+
 type SentBundle struct {
 	BundleHash  common.Hash `json:"bundleHash"`
 	BlockNumber uint64      `json:"-"`

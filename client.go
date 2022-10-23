@@ -113,11 +113,42 @@ type sendBundleParam struct {
 // returned SentBundle can be passed to GetBundleStats to check the bundle
 // status inside the relay.
 func (c *Client) SendBundle(ctx context.Context, req SendBundleParam) (*SentBundle, error) {
+	if req.BlockNumber == 0 {
+		return nil, errors.New("cannot send bundle without block number")
+	}
+
+	sb, err := c.SendBundleInRange(ctx, SendBundleInRangeParam{
+		Txs:              req.Txs,
+		StartBlockNumber: req.BlockNumber,
+		EndBlockNumber:   req.BlockNumber,
+		MinTimestamp:     req.MinTimestamp,
+		MaxTimestamp:     req.MaxTimestamp,
+		AllowRevertTxs:   req.AllowRevertTxs,
+	})
+
+	if err != nil {
+		return nil, err
+	}
+	return &sb[0], nil
+}
+
+// SendBundleInRange is a helper function that can send multiple bundle within
+// the start and end block number. The current implementation only sends one
+// request at a time so it might take some time if you're trying to book a
+// considerable amount of blocks. It will return error if any of the bundle
+// request returns error.
+func (c *Client) SendBundleInRange(ctx context.Context, req SendBundleInRangeParam) ([]SentBundle, error) {
 	if len(req.Txs) == 0 {
 		return nil, errors.New("cannot send bundle with empty txs")
 	}
-	if req.BlockNumber == 0 {
-		return nil, errors.New("cannot send bundle without block number")
+	if req.StartBlockNumber == 0 {
+		return nil, errors.New("cannot send bundle without a start block number")
+	}
+	if req.EndBlockNumber == 0 {
+		return nil, errors.New("cannot send bundle without an end block number")
+	}
+	if req.StartBlockNumber > req.EndBlockNumber {
+		return nil, errors.New("the start block number cannot be greater than the end block number")
 	}
 	if !isSubsetTxs(req.Txs, req.AllowRevertTxs) {
 		return nil, errors.New("allow revert txs must be a subset of txs")
@@ -127,21 +158,31 @@ func (c *Client) SendBundle(ctx context.Context, req SendBundleParam) (*SentBund
 	if err != nil {
 		return nil, err
 	}
-	jsonReq := sendBundleParam{
-		Txs:               hexTxs,
-		BlockNumber:       hexutil.Uint64(req.BlockNumber),
-		MinTimestamp:      unixTime(req.MinTimestamp),
-		MaxTimestamp:      unixTime(req.MaxTimestamp),
-		RevertingTxHashes: make([]common.Hash, 0, len(req.AllowRevertTxs)),
-	}
+
+	var revertingTxHashes []common.Hash
 	for _, tx := range req.AllowRevertTxs {
-		jsonReq.RevertingTxHashes = append(jsonReq.RevertingTxHashes, tx.Hash())
+		revertingTxHashes = append(revertingTxHashes, tx.Hash())
 	}
 
-	jsonRes := &SentBundle{
-		BlockNumber: req.BlockNumber,
+	blockLen := req.EndBlockNumber - req.StartBlockNumber + 1
+	jsonRes := make([]SentBundle, blockLen)
+	for i := range jsonRes {
+		blockNumber := req.StartBlockNumber + uint64(i)
+		jsonRes[i].BlockNumber = blockNumber
+		jsonReq := sendBundleParam{
+			Txs:               hexTxs,
+			BlockNumber:       hexutil.Uint64(blockNumber),
+			MinTimestamp:      unixTime(req.MinTimestamp),
+			MaxTimestamp:      unixTime(req.MaxTimestamp),
+			RevertingTxHashes: revertingTxHashes,
+		}
+
+		if err := c.Call(ctx, &jsonRes[i], "eth_sendBundle", &jsonReq); err != nil {
+			return nil, err
+		}
 	}
-	return jsonRes, c.Call(ctx, jsonRes, "eth_sendBundle", &jsonReq)
+
+	return jsonRes, nil
 }
 
 type callBundleParam struct {
